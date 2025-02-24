@@ -14,8 +14,8 @@
             position: relative;
         }
         #question-area {
-            max-width: calc(100% - 220px); /* Leaves room for status box (200px + 20px padding/margin) */
-            word-wrap: break-word; /* Ensures long words wrap */
+            max-width: calc(100% - 220px);
+            word-wrap: break-word;
         }
         #question, #feedback { margin-bottom: 20px; }
         #input { width: 600px; padding: 10px; font-size: 24px; }
@@ -64,10 +64,15 @@
     </div>
 
     <script src="quizData.js"></script>
+    <script src="nearMatch.js"></script>
     <script>
         if (typeof quizData === 'undefined') {
             document.body.innerHTML = "Error: Quiz data not loaded. Please check quizData.js.";
             throw new Error("quizData.js not loaded");
+        }
+        if (typeof isNearMatch === 'undefined' || typeof highlightDifferences === 'undefined') {
+            document.body.innerHTML = "Error: Near-match functions not loaded. Please check nearMatch.js.";
+            throw new Error("nearMatch.js not loaded");
         }
 
         const sections = [...new Set(quizData.map(q => q.section))];
@@ -104,7 +109,7 @@
             }
 
             document.getElementById("welcome").style.display = "none";
-            document.getElementById("quiz").style.display = "flex"; /* Flex display on start */
+            document.getElementById("quiz").style.display = "flex";
             currentQuestionIndex = 0;
             wrongAnswers = [];
             isReviewPass = false;
@@ -137,41 +142,6 @@
             updateStatus();
         }
 
-        function levenshteinDistance(a, b) {
-            const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
-            for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
-            for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
-            for (let j = 1; j <= b.length; j++) {
-                for (let i = 1; i <= a.length; i++) {
-                    const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
-                    matrix[j][i] = Math.min(
-                        matrix[j][i - 1] + 1,
-                        matrix[j - 1][i] + 1,
-                        matrix[j - 1][i - 1] + indicator
-                    );
-                }
-            }
-            return matrix[b.length][a.length];
-        }
-
-        function highlightDifferences(userAnswer, correctAnswer) {
-            let userHighlighted = "";
-            let correctHighlighted = "";
-            const maxLength = Math.max(userAnswer.length, correctAnswer.length);
-            for (let i = 0; i < maxLength; i++) {
-                const userChar = userAnswer[i] || "";
-                const correctChar = correctAnswer[i] || "";
-                if (userChar !== correctChar) {
-                    userHighlighted += `<b>${userChar}</b>`;
-                    correctHighlighted += `<b>${correctChar}</b>`;
-                } else {
-                    userHighlighted += userChar;
-                    correctHighlighted += correctChar;
-                }
-            }
-            return { user: userHighlighted, correct: correctHighlighted };
-        }
-
         function submitAnswer() {
             const userAnswer = document.getElementById("input").value.trim();
             const correctAnswer = activeQuestions[currentQuestionIndex].answer;
@@ -187,8 +157,7 @@
                     moveToNextQuestion();
                 }
             } else {
-                const distance = levenshteinDistance(userAnswer, correctAnswer);
-                if (!isRetrying && distance <= 2 && userAnswer.length > 3) {
+                if (!isRetrying && isNearMatch(userAnswer, correctAnswer)) {
                     const { user, correct } = highlightDifferences(userAnswer, correctAnswer);
                     feedback = `Your answer: "${user}" is close to "${correct}". Is this acceptable? 
                         <button onclick="acceptSpelling(true)">Yes</button>
