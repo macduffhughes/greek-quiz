@@ -6,7 +6,17 @@
     <title>Ancient Greek Future Tense Quiz</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        #welcome, #quiz { margin-bottom: 20px; position: relative; } /* Relative positioning for quiz container */
+        #welcome, #quiz { margin-bottom: 20px; }
+        #quiz {
+            display: flex;
+            flex-wrap: nowrap;
+            justify-content: space-between;
+            position: relative;
+        }
+        #question-area {
+            max-width: calc(100% - 220px); /* Leaves room for status box (200px + 20px padding/margin) */
+            word-wrap: break-word; /* Ensures long words wrap */
+        }
         #question, #feedback { margin-bottom: 20px; }
         #input { width: 600px; padding: 10px; font-size: 24px; }
         button { padding: 5px 10px; margin-right: 10px; }
@@ -41,14 +51,16 @@
         <button onclick="startQuiz()">Start Quiz</button>
     </div>
     <div id="quiz" style="display: none;">
+        <div id="question-area">
+            <div id="question"></div>
+            <input type="text" id="input" placeholder="Type your answer here">
+            <button onclick="submitAnswer()">Submit</button>
+            <div id="feedback"></div>
+        </div>
         <div id="status-box">
             <div id="status-pass">Pass: First</div>
             <div id="status-counts">Done: 0 | Left: 0</div>
         </div>
-        <div id="question"></div>
-        <input type="text" id="input" placeholder="Type your answer here">
-        <button onclick="submitAnswer()">Submit</button>
-        <div id="feedback"></div>
     </div>
 
     <script src="quizData.js"></script>
@@ -92,7 +104,7 @@
             }
 
             document.getElementById("welcome").style.display = "none";
-            document.getElementById("quiz").style.display = "block";
+            document.getElementById("quiz").style.display = "flex"; /* Flex display on start */
             currentQuestionIndex = 0;
             wrongAnswers = [];
             isReviewPass = false;
@@ -214,7 +226,7 @@
                     document.getElementById("question").innerHTML = "Congratulations! You've completed the quiz with no mistakes!";
                     document.getElementById("input").style.display = "none";
                     document.getElementById("feedback").innerHTML = "";
-                    document.getElementById("status-box").style.display = "none"; // Hide status on completion
+                    document.getElementById("status-box").style.display = "none";
                     return;
                 }
             }
