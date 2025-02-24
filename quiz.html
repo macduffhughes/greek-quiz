@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ancient Greek Future Tense Quiz</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #welcome, #quiz { margin-bottom: 20px; position: relative; } /* Relative positioning for quiz container */
+        #question, #feedback { margin-bottom: 20px; }
+        #input { width: 600px; padding: 10px; font-size: 24px; }
+        button { padding: 5px 10px; margin-right: 10px; }
+        .section-option { margin: 5px 0; }
+        #status-box {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 200px;
+            height: 100px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            text-align: center;
+            padding: 10px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        #status-pass { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Ancient Greek Future Tense Quiz</h1>
+    <div id="welcome">
+        <h2>Select Sections to Quiz</h2>
+        <div id="section-options"></div>
+        <button onclick="selectAllSections(true)">Select All</button>
+        <button onclick="selectAllSections(false)">Select None</button>
+        <h3>Order Preference</h3>
+        <label><input type="radio" name="order" value="ordered" checked> In Order</label>
+        <label><input type="radio" name="order" value="random"> Random</label>
+        <br><br>
+        <button onclick="startQuiz()">Start Quiz</button>
+    </div>
+    <div id="quiz" style="display: none;">
+        <div id="status-box">
+            <div id="status-pass">Pass: First</div>
+            <div id="status-counts">Done: 0 | Left: 0</div>
+        </div>
+        <div id="question"></div>
+        <input type="text" id="input" placeholder="Type your answer here">
+        <button onclick="submitAnswer()">Submit</button>
+        <div id="feedback"></div>
+    </div>
+
+    <script src="quizData.js"></script>
+    <script>
+        if (typeof quizData === 'undefined') {
+            document.body.innerHTML = "Error: Quiz data not loaded. Please check quizData.js.";
+            throw new Error("quizData.js not loaded");
+        }
+
+        const sections = [...new Set(quizData.map(q => q.section))];
+        const sectionLabels = [...new Set(quizData.map(q => q.sectionLabel))];
+        const sectionOptionsDiv = document.getElementById("section-options");
+        sectionLabels.forEach((label, index) => {
+            const div = document.createElement("div");
+            div.className = "section-option";
+            div.innerHTML = `<label><input type="checkbox" value="${sections[index]}"> ${label}</label>`;
+            sectionOptionsDiv.appendChild(div);
+        });
+
+        function selectAllSections(select) {
+            document.querySelectorAll("#section-options input[type='checkbox']").forEach(cb => cb.checked = select);
+        }
+
+        let activeQuestions = [];
+        let currentQuestionIndex = 0;
+        let wrongAnswers = [];
+        let isRetrying = false;
+        let isReviewPass = false;
+
+        function startQuiz() {
+            const selectedSections = Array.from(document.querySelectorAll("#section-options input:checked")).map(cb => cb.value);
+            if (selectedSections.length === 0) {
+                alert("Please select at least one section!");
+                return;
+            }
+
+            activeQuestions = quizData.filter(q => selectedSections.includes(q.section));
+            const isRandom = document.querySelector("input[name='order'][value='random']").checked;
+            if (isRandom) {
+                activeQuestions = shuffleArray(activeQuestions);
+            }
+
+            document.getElementById("welcome").style.display = "none";
+            document.getElementById("quiz").style.display = "block";
+            currentQuestionIndex = 0;
+            wrongAnswers = [];
+            isReviewPass = false;
+            updateStatus();
+            loadQuestion();
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function updateStatus() {
+            const passText = isReviewPass ? "Pass: Review" : "Pass: First";
+            const doneCount = isReviewPass ? (activeQuestions.length - currentQuestionIndex) : currentQuestionIndex;
+            const leftCount = isReviewPass ? currentQuestionIndex : (activeQuestions.length - currentQuestionIndex);
+            document.getElementById("status-pass").textContent = passText;
+            document.getElementById("status-counts").textContent = `Done: ${doneCount} | Left: ${leftCount}`;
+        }
+
+        function loadQuestion() {
+            if (activeQuestions.length === 0) return;
+            const q = activeQuestions[currentQuestionIndex];
+            document.getElementById("question").innerHTML = `<p><strong>Context:</strong> ${q.context}</p><p><strong>Question:</strong> ${q.question}</p>`;
+            document.getElementById("input").value = "";
+            document.getElementById("feedback").innerHTML = isRetrying ? `Please re-enter the correct answer: "${activeQuestions[currentQuestionIndex].answer}"` : "";
+            updateStatus();
+        }
+
+        function levenshteinDistance(a, b) {
+            const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+            for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+            for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+            for (let j = 1; j <= b.length; j++) {
+                for (let i = 1; i <= a.length; i++) {
+                    const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[j][i] = Math.min(
+                        matrix[j][i - 1] + 1,
+                        matrix[j - 1][i] + 1,
+                        matrix[j - 1][i - 1] + indicator
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        function highlightDifferences(userAnswer, correctAnswer) {
+            let userHighlighted = "";
+            let correctHighlighted = "";
+            const maxLength = Math.max(userAnswer.length, correctAnswer.length);
+            for (let i = 0; i < maxLength; i++) {
+                const userChar = userAnswer[i] || "";
+                const correctChar = correctAnswer[i] || "";
+                if (userChar !== correctChar) {
+                    userHighlighted += `<b>${userChar}</b>`;
+                    correctHighlighted += `<b>${correctChar}</b>`;
+                } else {
+                    userHighlighted += userChar;
+                    correctHighlighted += correctChar;
+                }
+            }
+            return { user: userHighlighted, correct: correctHighlighted };
+        }
+
+        function submitAnswer() {
+            const userAnswer = document.getElementById("input").value.trim();
+            const correctAnswer = activeQuestions[currentQuestionIndex].answer;
+            let feedback = "";
+
+            if (userAnswer === correctAnswer) {
+                if (isRetrying) {
+                    feedback = "Correct! You've entered it right this time.";
+                    isRetrying = false;
+                    moveToNextQuestion();
+                } else {
+                    feedback = "Correct! Well done.";
+                    moveToNextQuestion();
+                }
+            } else {
+                const distance = levenshteinDistance(userAnswer, correctAnswer);
+                if (!isRetrying && distance <= 2 && userAnswer.length > 3) {
+                    const { user, correct } = highlightDifferences(userAnswer, correctAnswer);
+                    feedback = `Your answer: "${user}" is close to "${correct}". Is this acceptable? 
+                        <button onclick="acceptSpelling(true)">Yes</button>
+                        <button onclick="acceptSpelling(false)">No</button>`;
+                } else {
+                    feedback = `Incorrect. The correct answer is "${correctAnswer}". Please re-enter it to continue.`;
+                    isRetrying = true;
+                    wrongAnswers.push(currentQuestionIndex);
+                }
+                document.getElementById("feedback").innerHTML = feedback;
+            }
+        }
+
+        function acceptSpelling(isAcceptable) {
+            if (isAcceptable) {
+                document.getElementById("feedback").innerHTML = "Accepted as correct!";
+                moveToNextQuestion();
+            } else {
+                document.getElementById("feedback").innerHTML = `Marked as incorrect. The correct answer is "${activeQuestions[currentQuestionIndex].answer}". Please re-enter it to continue.`;
+                isRetrying = true;
+                wrongAnswers.push(currentQuestionIndex);
+            }
+        }
+
+        function moveToNextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex >= activeQuestions.length) {
+                if (wrongAnswers.length > 0) {
+                    document.getElementById("feedback").innerHTML = "You've completed the selected questions! Revisiting ones you got wrong...";
+                    activeQuestions = wrongAnswers.map(idx => activeQuestions[idx]);
+                    wrongAnswers = [];
+                    currentQuestionIndex = 0;
+                    isReviewPass = true;
+                } else {
+                    document.getElementById("question").innerHTML = "Congratulations! You've completed the quiz with no mistakes!";
+                    document.getElementById("input").style.display = "none";
+                    document.getElementById("feedback").innerHTML = "";
+                    document.getElementById("status-box").style.display = "none"; // Hide status on completion
+                    return;
+                }
+            }
+            isRetrying = false;
+            setTimeout(loadQuestion, 1000);
+        }
+    </script>
+</body>
+</html>
