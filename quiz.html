@@ -48,7 +48,8 @@
         <label><input type="radio" name="order" value="ordered" checked> In Order</label>
         <label><input type="radio" name="order" value="random"> Random</label>
         <br><br>
-        <button onclick="startQuiz()">Start Quiz</button>
+        <button onclick="startQuiz(true)">Start New Quiz</button>
+        <button id="resume-button" onclick="startQuiz(false)" style="display: none;">Resume Previous Quiz</button>
     </div>
     <div id="quiz" style="display: none;">
         <div id="question-area">
@@ -65,6 +66,7 @@
 
     <script src="quizData.js"></script>
     <script src="nearMatch.js"></script>
+    <script src="stateManager.js"></script>
     <script>
         if (typeof quizData === 'undefined') {
             document.body.innerHTML = "Error: Quiz data not loaded. Please check quizData.js.";
@@ -73,6 +75,10 @@
         if (typeof isNearMatch === 'undefined' || typeof highlightDifferences === 'undefined') {
             document.body.innerHTML = "Error: Near-match functions not loaded. Please check nearMatch.js.";
             throw new Error("nearMatch.js not loaded");
+        }
+        if (typeof saveState === 'undefined' || typeof loadState === 'undefined' || typeof clearState === 'undefined') {
+            document.body.innerHTML = "Error: State management functions not loaded. Please check stateManager.js.";
+            throw new Error("stateManager.js not loaded");
         }
 
         const sections = [...new Set(quizData.map(q => q.section))];
@@ -85,6 +91,20 @@
             sectionOptionsDiv.appendChild(div);
         });
 
+        // Check for saved state and show resume button if present
+        const savedState = loadState();
+        if (savedState) {
+            document.getElementById("resume-button").style.display = "inline";
+            prefillWelcomeScreen(savedState);
+        }
+
+        function prefillWelcomeScreen(state) {
+            document.querySelectorAll("#section-options input[type='checkbox']").forEach(cb => {
+                cb.checked = state.selectedSections.includes(cb.value);
+            });
+            document.querySelector(`input[name='order'][value='${state.order}']`).checked = true;
+        }
+
         function selectAllSections(select) {
             document.querySelectorAll("#section-options input[type='checkbox']").forEach(cb => cb.checked = select);
         }
@@ -94,25 +114,50 @@
         let wrongAnswers = [];
         let isRetrying = false;
         let isReviewPass = false;
+        let completedQuestions = [];
 
-        function startQuiz() {
+        function questionId(q) {
+            return `${q.section}-${q.question.split('.')[0]}`; // e.g., "μελέτημα αʹ-1"
+        }
+
+        function startQuiz(isNew) {
             const selectedSections = Array.from(document.querySelectorAll("#section-options input:checked")).map(cb => cb.value);
             if (selectedSections.length === 0) {
                 alert("Please select at least one section!");
                 return;
             }
 
-            activeQuestions = quizData.filter(q => selectedSections.includes(q.section));
-            const isRandom = document.querySelector("input[name='order'][value='random']").checked;
-            if (isRandom) {
-                activeQuestions = shuffleArray(activeQuestions);
+            const order = document.querySelector("input[name='order']:checked").value;
+            const state = isNew ? null : loadState();
+
+            if (isNew || !state) {
+                clearState();
+                activeQuestions = quizData.filter(q => selectedSections.includes(q.section));
+                completedQuestions = [];
+                wrongAnswers = [];
+                currentQuestionIndex = 0;
+                isReviewPass = false;
+                if (order === "random") {
+                    activeQuestions = shuffleArray(activeQuestions);
+                }
+            } else {
+                activeQuestions = quizData.filter(q => state.selectedSections.includes(q.section));
+                completedQuestions = state.completed || [];
+                wrongAnswers = state.wrong || [];
+                currentQuestionIndex = state.currentIndex || 0;
+                isReviewPass = state.isReviewPass || false;
+                if (state.order === "random" && !isReviewPass) {
+                    activeQuestions = shuffleArray(activeQuestions.filter(q => !completedQuestions.includes(questionId(q))));
+                } else if (isReviewPass) {
+                    activeQuestions = wrongAnswers.map(id => quizData.find(q => questionId(q) === id));
+                } else {
+                    activeQuestions = activeQuestions.filter(q => !completedQuestions.includes(questionId(q)));
+                }
             }
 
             document.getElementById("welcome").style.display = "none";
             document.getElementById("quiz").style.display = "flex";
-            currentQuestionIndex = 0;
-            wrongAnswers = [];
-            isReviewPass = false;
+            saveState(selectedSections, order, completedQuestions, wrongAnswers, currentQuestionIndex, isReviewPass);
             updateStatus();
             loadQuestion();
         }
@@ -127,7 +172,7 @@
 
         function updateStatus() {
             const passText = isReviewPass ? "Pass: Review" : "Pass: First";
-            const doneCount = isReviewPass ? (activeQuestions.length - currentQuestionIndex) : currentQuestionIndex;
+            const doneCount = isReviewPass ? (activeQuestions.length - currentQuestionIndex) : (currentQuestionIndex + completedQuestions.length);
             const leftCount = isReviewPass ? currentQuestionIndex : (activeQuestions.length - currentQuestionIndex);
             document.getElementById("status-pass").textContent = passText;
             document.getElementById("status-counts").textContent = `Done: ${doneCount} | Left: ${leftCount}`;
@@ -151,9 +196,11 @@
                 if (isRetrying) {
                     feedback = "Correct! You've entered it right this time.";
                     isRetrying = false;
+                    completedQuestions.push(questionId(activeQuestions[currentQuestionIndex]));
                     moveToNextQuestion();
                 } else {
                     feedback = "Correct! Well done.";
+                    completedQuestions.push(questionId(activeQuestions[currentQuestionIndex]));
                     moveToNextQuestion();
                 }
             } else {
@@ -165,7 +212,9 @@
                 } else {
                     feedback = `Incorrect. The correct answer is "${correctAnswer}". Please re-enter it to continue.`;
                     isRetrying = true;
-                    wrongAnswers.push(currentQuestionIndex);
+                    if (!wrongAnswers.includes(questionId(activeQuestions[currentQuestionIndex]))) {
+                        wrongAnswers.push(questionId(activeQuestions[currentQuestionIndex]));
+                    }
                 }
                 document.getElementById("feedback").innerHTML = feedback;
             }
@@ -174,11 +223,14 @@
         function acceptSpelling(isAcceptable) {
             if (isAcceptable) {
                 document.getElementById("feedback").innerHTML = "Accepted as correct!";
+                completedQuestions.push(questionId(activeQuestions[currentQuestionIndex]));
                 moveToNextQuestion();
             } else {
                 document.getElementById("feedback").innerHTML = `Marked as incorrect. The correct answer is "${activeQuestions[currentQuestionIndex].answer}". Please re-enter it to continue.`;
                 isRetrying = true;
-                wrongAnswers.push(currentQuestionIndex);
+                if (!wrongAnswers.includes(questionId(activeQuestions[currentQuestionIndex]))) {
+                    wrongAnswers.push(questionId(activeQuestions[currentQuestionIndex]));
+                }
             }
         }
 
@@ -187,7 +239,7 @@
             if (currentQuestionIndex >= activeQuestions.length) {
                 if (wrongAnswers.length > 0) {
                     document.getElementById("feedback").innerHTML = "You've completed the selected questions! Revisiting ones you got wrong...";
-                    activeQuestions = wrongAnswers.map(idx => activeQuestions[idx]);
+                    activeQuestions = wrongAnswers.map(id => quizData.find(q => questionId(q) === id));
                     wrongAnswers = [];
                     currentQuestionIndex = 0;
                     isReviewPass = true;
@@ -196,10 +248,14 @@
                     document.getElementById("input").style.display = "none";
                     document.getElementById("feedback").innerHTML = "";
                     document.getElementById("status-box").style.display = "none";
+                    clearState();
                     return;
                 }
             }
             isRetrying = false;
+            const selectedSections = [...new Set(activeQuestions.map(q => q.section))];
+            const order = document.querySelector("input[name='order']:checked").value;
+            saveState(selectedSections, order, completedQuestions, wrongAnswers, currentQuestionIndex, isReviewPass);
             setTimeout(loadQuestion, 1000);
         }
     </script>
