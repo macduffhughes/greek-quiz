@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ancient Greek Future Tense Practice</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { cursor: pointer; } /* Visual cue for clickability */
+        #config, #game { margin-bottom: 20px; }
+        .option { margin: 5px 0; }
+        #verb-list { max-height: 200px; overflow-y: auto; }
+        #question, #feedback { margin-bottom: 20px; }
+        #input { width: 400px; padding: 8px; font-size: 20px; }
+        button { padding: 5px 10px; margin-right: 10px; }
+        #choices button { display: block; width: 200px; margin: 5px 0; }
+        #matching { display: flex; justify-content: space-between; }
+        #matching-left, #matching-right { width: 45%; }
+        .match-item { padding: 5px; cursor: pointer; }
+        .match-item.selected { background: #ddd; }
+        .match-item.correct { background: #90ee90; }
+    </style>
+</head>
+<body>
+    <h1 onclick="abortGame()">Ancient Greek Future Tense Practice</h1>
+    <div id="config">
+        <h2>Configure Your Practice</h2>
+        <div class="option">
+            <label>Verbs: <button onclick="toggleVerbList()">Customize</button></label>
+            <div id="verb-list" style="display: none;"></div>
+        </div>
+        <div class="option">
+            <label><input type="checkbox" id="include-dual"> Include Dual Forms</label>
+        </div>
+        <div class="option">
+            <label><input type="checkbox" id="fuzzy-match"> Fuzzy Match (accents only)</label>
+        </div>
+        <div class="option">
+            <label>Total Questions: <input type="number" id="question-count" value="20" min="5" max="100"></label>
+        </div>
+        <div class="option">
+            <label>Exercise Type: 
+                <select id="exercise-type">
+                    <option value="generate">Generate</option>
+                    <option value="recognize">Recognize</option>
+                    <option value="rewrite-present">Rewrite Present to Future</option>
+                    <option value="rewrite-future">Rewrite Future to Present</option>
+                </select>
+            </label>
+        </div>
+        <div class="option">
+            <label>Game Mode: 
+                <select id="game-mode">
+                    <option value="multiple-choice">Multiple Choice</option>
+                    <option value="matching">Matching</option>
+                    <option value="free-typing">Free Typing</option>
+                </select>
+            </label>
+        </div>
+        <button onclick="startGame()">Start Game</button>
+    </div>
+    <div id="game" style="display: none;">
+        <div id="progress"></div>
+        <div id="question"></div>
+        <div id="choices" style="display: none;"></div>
+        <div id="matching" style="display: none;">
+            <div id="matching-left"></div>
+            <div id="matching-right"></div>
+        </div>
+        <div id="input-area" style="display: none;">
+            <input type="text" id="input" placeholder="Type your answer">
+            <button onclick="submitAnswer()">Submit</button>
+            <button onclick="skipAnswer()">I don't know</button>
+        </div>
+        <div id="feedback"></div>
+    </div>
+
+    <script src="verbs.js"></script>
+    <script src="nearMatch.js"></script>
+    <script src="gameLogic.js"></script>
+    <script>
+        if (typeof verbs === 'undefined' || typeof verbConjugations === 'undefined') throw new Error("verbs.js not loaded");
+        if (typeof isNearMatch === 'undefined' || typeof highlightDifferences === 'undefined') throw new Error("nearMatch.js not loaded");
+        if (typeof generateFuture === 'undefined') throw new Error("gameLogic.js not loaded");
+
+        const savedVerbs = localStorage.getItem("selectedVerbs");
+        let defaultVerbs = savedVerbs ? JSON.parse(savedVerbs) : verbs;
+
+        function toggleVerbList() {
+            const verbList = document.getElementById("verb-list");
+            if (verbList.style.display === "none") {
+                verbList.style.display = "block";
+                verbList.innerHTML = verbs.map(v => `<label><input type="checkbox" value="${v}" ${defaultVerbs.includes(v) ? 'checked' : ''}> ${v}</label>`).join("<br>");
+            } else {
+                verbList.style.display = "none";
+            }
+        }
+
+        let gameState = null;
+
+        function startGame() {
+            let selectedVerbs = Array.from(document.querySelectorAll("#verb-list input:checked")).map(cb => cb.value);
+            if (selectedVerbs.length === 0) {
+                selectedVerbs = defaultVerbs;
+            }
+            if (selectedVerbs.length === 0) {
+                alert("No verbs selected and no default available!");
+                return;
+            }
+            localStorage.setItem("selectedVerbs", JSON.stringify(selectedVerbs));
+            defaultVerbs = selectedVerbs;
+
+            gameState = {
+                verbs: selectedVerbs,
+                includeDual: document.getElementById("include-dual").checked,
+                fuzzyMatch: document.getElementById("fuzzy-match").checked,
+                questionCount: Math.max(5, Math.min(100, parseInt(document.getElementById("question-count").value) || 20)),
+                exerciseType: document.getElementById("exercise-type").value,
+                gameMode: document.getElementById("game-mode").value,
+                questions: [],
+                currentIndex: 0,
+                firstTryCorrect: 0,
+                startTime: null
+            };
+            initializeGame(gameState);
+            document.getElementById("config").style.display = "none";
+            document.getElementById("game").style.display = "block";
+            loadNextQuestion();
+        }
+
+        function abortGame() {
+            document.getElementById("game").style.display = "none";
+            document.getElementById("config").style.display = "block";
+            gameState = null; // Reset game state
+        }
+
+        function loadNextQuestion() {
+            if (gameState.currentIndex >= gameState.questions.length) {
+                endGame();
+                return;
+            }
+            displayQuestion(gameState);
+        }
+
+        function submitAnswer() {
+            const userAnswer = document.getElementById("input").value.trim();
+            checkAnswer(userAnswer, gameState);
+        }
+
+        function skipAnswer() {
+            const correctAnswer = gameState.questions[gameState.currentIndex].answer;
+            document.getElementById("feedback").textContent = `Please enter the correct answer: "${correctAnswer}"`;
+            gameState.isRetrying = true;
+        }
+    </script>
+</body>
+</html>
