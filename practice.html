@@ -6,7 +6,7 @@
     <title>Ancient Greek Future Tense Practice</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { cursor: pointer; } /* Visual cue for clickability */
+        h1 { cursor: pointer; }
         #config, #game { margin-bottom: 20px; }
         .option { margin: 5px 0; }
         #verb-list { max-height: 200px; overflow-y: auto; }
@@ -19,6 +19,7 @@
         .match-item { padding: 5px; cursor: pointer; }
         .match-item.selected { background: #ddd; }
         .match-item.correct { background: #90ee90; }
+        .person-img { vertical-align: middle; width: 128px; height: 96px; } /* Doubled from 64x48 */
     </style>
 </head>
 <body>
@@ -131,7 +132,7 @@
         function abortGame() {
             document.getElementById("game").style.display = "none";
             document.getElementById("config").style.display = "block";
-            gameState = null; // Reset game state
+            gameState = null;
         }
 
         function loadNextQuestion() {

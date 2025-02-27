@@ -7,6 +7,11 @@ const personNumberMap = {
     "2nd-dual": "2d", "3rd-dual": "3d",
     "1st-plural": "1p", "2nd-plural": "2p", "3rd-plural": "3p"
 };
+const imageMap = {
+    "1s": "Greek1PSing.png", "1p": "Greek1PPlural.png", "1d": "Greek1PDual.png",
+    "2s": "Greek2PSing.png", "2p": "Greek2PPlural.png", "2d": "Greek2PDual.png",
+    "3s": "Greek3PSing.png", "3p": "Greek3PPlural.png", "3d": "Greek3PDual.png"
+};
 
 function generateFuture(base, person, number) {
     const key = `${person}-${number}`;
@@ -52,17 +57,23 @@ function initializeGame(state) {
 function displayQuestion(state) {
     const q = state.questions[state.currentIndex];
     let prompt = "";
+    let verbBase = "";
     switch (state.exerciseType) {
         case "generate":
+            verbBase = q.question.split(", ")[0];
+            const [person, , number] = q.question.split(", ")[1].split(" ");
+            const imgKey = `${person.charAt(0)}${number.charAt(0).toLowerCase()}`;
+            const personNumberText = `${person} person ${number}`;
             if (state.gameMode === "multiple-choice") {
-                prompt = `Select the future for: <b>${q.question.split(", ")[0]}</b> ${q.question.split(", ")[1]}`;
+                prompt = `Select the future for: <b>${verbBase}</b> ${personNumberText} <img src="images/${imageMap[imgKey]}" class="person-img" alt="${personNumberText}">`;
             } else if (state.gameMode === "matching") {
                 prompt = "Click an item from the left column, then click the matching item from the right column.";
             } else {
-                prompt = `Type the future for: <b>${q.question.split(", ")[0]}</b> ${q.question.split(", ")[1]}`;
+                prompt = `Type the future for: <b>${verbBase}</b> ${personNumberText} <img src="images/${imageMap[imgKey]}" class="person-img" alt="${personNumberText}">`;
             }
             break;
         case "recognize":
+            verbBase = q.answer.split(", ")[0];
             if (state.gameMode === "multiple-choice") {
                 prompt = `Choose the base verb and case/number for: <b>${q.question}</b>`;
             } else if (state.gameMode === "matching") {
@@ -72,6 +83,7 @@ function displayQuestion(state) {
             }
             break;
         case "rewrite-present":
+            verbBase = Object.keys(verbConjugations).find(v => verbConjugations[v].present[personNumberMap[state.questions[state.currentIndex].question.split(", ")[1]?.replace(" person ", "-") || "1s"]] === q.question);
             if (state.gameMode === "multiple-choice") {
                 prompt = `Choose the future form for: <b>${q.question}</b>`;
             } else if (state.gameMode === "matching") {
@@ -81,6 +93,7 @@ function displayQuestion(state) {
             }
             break;
         case "rewrite-future":
+            verbBase = Object.keys(verbConjugations).find(v => verbConjugations[v].future[personNumberMap[state.questions[state.currentIndex].answer.split(", ")[1]?.replace(" person ", "-") || "1s"]] === q.question);
             if (state.gameMode === "multiple-choice") {
                 prompt = `Choose the present form for: <b>${q.question}</b>`;
             } else if (state.gameMode === "matching") {
@@ -97,9 +110,16 @@ function displayQuestion(state) {
 
     if (state.gameMode === "multiple-choice") {
         const choices = [q.answer];
+        const verbForms = { ...verbConjugations[verbBase].present, ...verbConjugations[verbBase].future };
+        const allOptions = Object.values(verbForms).filter(form => form !== q.answer);
+        while (choices.length < 5 && allOptions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * allOptions.length);
+            const option = allOptions.splice(randomIndex, 1)[0];
+            if (!choices.includes(option)) choices.push(option);
+        }
         while (choices.length < 5) {
-            const other = state.questions[Math.floor(Math.random() * state.questions.length)].answer;
-            if (!choices.includes(other)) choices.push(other);
+            const fallback = Object.values(verbForms)[Math.floor(Math.random() * Object.values(verbForms).length)];
+            if (!choices.includes(fallback)) choices.push(fallback);
         }
         shuffleArray(choices);
         document.getElementById("choices").innerHTML = choices.map(c => `<button onclick="checkAnswer('${c}', gameState)">${c}</button>`).join("");
@@ -107,7 +127,13 @@ function displayQuestion(state) {
         document.getElementById("input-area").style.display = "none";
         document.getElementById("matching").style.display = "none";
     } else if (state.gameMode === "matching") {
-        const left = state.questions.map((q, i) => ({ id: i, text: q.question }));
+        const left = state.questions.map((q, i) => {
+            const [verb, rest] = q.question.split(", ");
+            const [person, , number] = rest.split(" ");
+            const imgKey = `${person.charAt(0)}${number.charAt(0).toLowerCase()}`;
+            const personNumberText = `${person} person ${number}`;
+            return { id: i, text: `<b>${verb}</b> ${personNumberText} <img src="images/${imageMap[imgKey]}" class="person-img" alt="${personNumberText}">` };
+        });
         const right = state.questions.map((q, i) => ({ id: i, text: q.answer }));
         shuffleArray(right);
         document.getElementById("matching-left").innerHTML = left.map(item => 
